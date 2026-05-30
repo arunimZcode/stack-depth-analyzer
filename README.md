@@ -1,4 +1,7 @@
-# Stack Depth Analyzer
+## Demo 
+[Watch Demo Video]- https://drive.google.com/file/d/1ue2-XA6WaqhY-siMnD6GBhNC22jaTPJD/view?usp=sharing
+
+# Assignment 39 - Compile-Time Stack Usage Analyzer
 
 An LLVM analysis pass that statically estimates **worst-case cumulative stack usage** across entire call chains — built for embedded and RTOS development where stack overflow is the #1 cause of mysterious crashes.
 
@@ -107,6 +110,6 @@ stack-analyzer/
 └── index.html                # Web frontend UI
 ```
 
-## Authors
+## Assignment
 
 Built as Assignment 39 — Compile-Time Stack Usage Analyzer using LLVM Pass Infrastructure.
