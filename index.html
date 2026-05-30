@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stack Depth Analyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d0d14;
+  --surface: #13131f;
+  --surface2: #1c1c2e;
+  --surface3: #22223a;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.13);
+  --accent: #6c5ce7;
+  --accent2: #a29bfe;
+  --green: #00cba9;
+  --red: #ff4757;
+  --amber: #ffa502;
+  --text: #eeeef5;
+  --muted: #6b6b88;
+  --muted2: #9898b0;
+  --mono: 'Space Mono', monospace;
+  --sans: 'DM Sans', sans-serif;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(ellipse 60% 40% at 15% 5%, rgba(108,92,231,0.08) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 30% at 85% 90%, rgba(0,203,169,0.05) 0%, transparent 55%);
+}
+.wrap { position: relative; z-index: 1; max-width: 1140px; margin: 0 auto; padding: 0 28px; }
+
+header { padding: 36px 0 28px; border-bottom: 1px solid var(--border); margin-bottom: 32px; }
+.logo { display: flex; align-items: center; gap: 14px; }
+.logo-box { width: 40px; height: 40px; background: var(--accent); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 14px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.logo-title { font-family: var(--mono); font-size: 20px; font-weight: 700; }
+.logo-sub { font-size: 13px; color: var(--muted2); margin-top: 2px; }
+
+.input-row { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: end; margin-bottom: 32px; }
+.input-left { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; }
+.drop-zone { border: 1.5px dashed var(--border2); border-radius: 12px; padding: 16px 20px; cursor: pointer; transition: all 0.2s; background: var(--surface); display: flex; align-items: center; gap: 12px; position: relative; }
+.drop-zone:hover, .drop-zone.drag { border-color: var(--accent); background: rgba(108,92,231,0.06); }
+.drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.upload-icon { width: 34px; height: 34px; border: 1px solid var(--border2); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.upload-icon svg { width: 18px; height: 18px; stroke: var(--accent2); fill: none; stroke-width: 1.5; }
+.drop-txt strong { font-size: 14px; font-weight: 500; display: block; }
+.drop-txt small { font-size: 12px; color: var(--muted2); }
+.file-chosen { display: none; font-family: var(--mono); font-size: 11px; color: var(--green); background: rgba(0,203,169,0.1); border: 1px solid rgba(0,203,169,0.2); border-radius: 6px; padding: 4px 10px; white-space: nowrap; }
+
+.thresh-block { display: flex; flex-direction: column; gap: 6px; }
+.thresh-label { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+.thresh-row { display: flex; align-items: center; gap: 8px; }
+.thresh-row input[type=number] { width: 100px; background: var(--surface); border: 1px solid var(--border2); border-radius: 9px; padding: 10px 12px; color: var(--text); font-family: var(--mono); font-size: 13px; outline: none; transition: border-color 0.2s; }
+.thresh-row input:focus { border-color: var(--accent); }
+.presets { display: flex; gap: 5px; flex-wrap: wrap; }
+.preset { font-size: 10px; font-family: var(--mono); padding: 5px 9px; border: 1px solid var(--border2); border-radius: 6px; cursor: pointer; color: var(--muted2); background: transparent; transition: all 0.15s; }
+.preset:hover { border-color: var(--accent); color: var(--accent2); }
+
+.run-btn { height: 46px; padding: 0 26px; background: var(--accent); border: none; border-radius: 10px; color: #fff; font-family: var(--mono); font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.run-btn:hover { background: var(--accent2); transform: translateY(-1px); }
+.run-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.spin { display: none; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.error-box { display: none; background: rgba(255,71,87,0.08); border: 1px solid rgba(255,71,87,0.25); border-radius: 12px; padding: 14px 18px; margin-bottom: 20px; font-family: var(--mono); font-size: 12px; color: var(--red); }
+
+#results { display: none; padding-bottom: 60px; }
+
+.stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 22px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+.stat-lbl { font-size: 12px; color: var(--muted2); margin-bottom: 8px; font-weight: 500; }
+.stat-num { font-family: var(--mono); font-size: 30px; font-weight: 700; line-height: 1; transition: color 0.4s; }
+.c-purple { color: var(--accent2); }
+.c-green { color: var(--green); }
+.c-red { color: var(--red); }
+.c-amber { color: var(--amber); }
+
+.headline { background: var(--surface); border: 1px solid var(--border2); border-left: 3px solid var(--accent); border-radius: 14px; padding: 22px 26px; margin-bottom: 22px; transition: all 0.4s; }
+.hl-label { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 14px; }
+.hl-chain { font-family: var(--mono); font-size: 13px; line-height: 2.2; word-break: break-all; margin-bottom: 14px; }
+.hl-fn { color: var(--accent2); }
+.hl-sz { color: var(--muted); font-size: 11px; }
+.hl-arr { color: var(--muted); margin: 0 4px; }
+.hl-total { font-family: var(--mono); font-size: 24px; font-weight: 700; margin-bottom: 10px; transition: color 0.4s; }
+.hl-total.safe { color: var(--green); }
+.hl-total.warn { color: var(--amber); }
+.hl-total.danger { color: var(--red); }
+.hl-meta { display: flex; gap: 20px; font-size: 13px; color: var(--muted2); flex-wrap: wrap; }
+.hl-meta b { color: var(--text); font-family: var(--mono); font-weight: 400; }
+.hl-over { color: var(--red); }
+.hl-room { color: var(--green); }
+
+/* OVERFLOW ALERT WITH FIX BUTTONS */
+.alert { border-radius: 12px; padding: 18px 20px; margin-bottom: 20px; border: 1px solid; }
+.alert.danger { background: rgba(255,71,87,0.07); border-color: rgba(255,71,87,0.2); }
+.alert.success { background: rgba(0,203,169,0.07); border-color: rgba(0,203,169,0.2); }
+.alert-top { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+.alert strong { display: block; font-size: 14px; margin-bottom: 3px; }
+.alert.danger strong { color: var(--red); }
+.alert.success strong { color: var(--green); }
+.alert p { font-size: 12px; color: var(--muted2); }
+.fix-buttons { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+.fix-btn {
+  border: 1px solid var(--border2); border-radius: 10px; padding: 14px 12px;
+  background: var(--surface2); cursor: pointer; text-align: left;
+  transition: all 0.2s; display: flex; flex-direction: column; gap: 6px;
+}
+.fix-btn:hover { border-color: var(--accent); background: rgba(108,92,231,0.08); transform: translateY(-2px); }
+.fix-btn.active { border-color: var(--green); background: rgba(0,203,169,0.08); }
+.fix-btn-icon { font-size: 20px; }
+.fix-btn-title { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--text); }
+.fix-btn-desc { font-size: 11px; color: var(--muted2); line-height: 1.5; }
+.fix-btn-saving { font-family: var(--mono); font-size: 11px; color: var(--green); margin-top: 4px; }
+.fix-btn.active .fix-btn-title { color: var(--green); }
+
+/* APPLIED BANNER */
+.applied-banner { display: none; background: rgba(0,203,169,0.08); border: 1px solid rgba(0,203,169,0.25); border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; display: none; align-items: center; gap: 10px; }
+.applied-banner.show { display: flex; }
+.applied-tag { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--green); background: rgba(0,203,169,0.15); padding: 3px 10px; border-radius: 20px; }
+.applied-text { font-size: 13px; color: var(--muted2); flex: 1; }
+.reset-btn { font-family: var(--mono); font-size: 11px; color: var(--muted); border: 1px solid var(--border2); background: transparent; border-radius: 6px; padding: 5px 12px; cursor: pointer; transition: all 0.15s; }
+.reset-btn:hover { color: var(--red); border-color: var(--red); }
+
+/* CHANGES PANEL */
+.changes-panel { background: var(--surface); border: 1px solid rgba(0,203,169,0.2); border-radius: 14px; overflow: hidden; margin-bottom: 22px; display: none; }
+.changes-panel.show { display: block; }
+.changes-hdr { padding: 14px 22px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--green); display: flex; align-items: center; gap: 8px; }
+.change-row { display: flex; align-items: center; gap: 12px; padding: 10px 22px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12px; }
+.change-row:last-child { border-bottom: none; }
+.change-fn { color: var(--accent2); flex: 1; }
+.change-before { color: var(--red); }
+.change-arrow { color: var(--muted); }
+.change-after { color: var(--green); }
+.change-reason { font-size: 11px; color: var(--muted2); }
+
+.chart-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; margin-bottom: 22px; }
+.panel-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.panel-title { font-family: var(--mono); font-size: 13px; font-weight: 700; }
+.legend { display: flex; gap: 16px; }
+.leg-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted2); }
+.leg-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+.raw-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; margin-bottom: 22px; }
+.raw-body { padding: 18px 22px; font-family: var(--mono); font-size: 12px; line-height: 2; }
+.raw-line { display: block; word-break: break-all; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.raw-line:last-child { border-bottom: none; }
+.raw-rank { color: var(--muted); margin-right: 6px; }
+.raw-depth { color: var(--accent2); font-weight: 700; margin-right: 8px; }
+.raw-fn { color: var(--accent2); }
+.raw-sz { color: var(--muted); }
+.raw-arr { color: var(--muted); margin: 0 2px; }
+
+.chains-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; margin-bottom: 22px; }
+.chain-item { padding: 16px 22px; border-bottom: 1px solid var(--border); transition: background 0.15s; }
+.chain-item:last-child { border-bottom: none; }
+.chain-item:hover { background: var(--surface2); }
+.chain-top { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.chain-rank { font-family: var(--mono); font-size: 10px; color: var(--muted); background: var(--surface3); padding: 3px 9px; border-radius: 5px; }
+.chain-depth { font-family: var(--mono); font-size: 18px; font-weight: 700; transition: color 0.4s; }
+.chain-depth.safe { color: var(--green); }
+.chain-depth.warn { color: var(--amber); }
+.chain-depth.danger { color: var(--red); }
+.chain-badge { font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px; margin-left: auto; transition: all 0.4s; }
+.chain-badge.safe { background: rgba(0,203,169,0.12); color: var(--green); }
+.chain-badge.danger { background: rgba(255,71,87,0.12); color: var(--red); }
+.chain-nodes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.node { background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; transition: all 0.4s; }
+.node.fixed { border-color: rgba(0,203,169,0.4); background: rgba(0,203,169,0.07); }
+.node-fn { font-family: var(--mono); font-size: 11px; color: var(--accent2); }
+.node-sz { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.node-sz.was { text-decoration: line-through; color: var(--red); }
+.node-sz-new { font-family: var(--mono); font-size: 10px; color: var(--green); }
+.node-arr { color: var(--muted); font-size: 14px; }
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 22px; }
+.mini-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.mini-hdr { padding: 14px 18px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12px; font-weight: 700; }
+.fn-row { display: flex; align-items: center; gap: 10px; padding: 9px 18px; border-bottom: 1px solid var(--border); transition: background 0.15s; }
+.fn-row:last-child { border-bottom: none; }
+.fn-row:hover { background: var(--surface2); }
+.fn-nm { font-family: var(--mono); font-size: 11px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fn-bar-track { width: 70px; height: 3px; background: var(--surface3); border-radius: 2px; flex-shrink: 0; }
+.fn-bar-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width 0.5s; }
+.fn-b { font-family: var(--mono); font-size: 11px; color: var(--muted2); width: 46px; text-align: right; flex-shrink: 0; }
+.risk-row { display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-bottom: 1px solid var(--border); }
+.risk-row:last-child { border-bottom: none; }
+.risk-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); flex-shrink: 0; }
+.risk-fn { font-family: var(--mono); font-size: 11px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.risk-over { font-family: var(--mono); font-size: 11px; color: var(--red); white-space: nowrap; }
+.all-clear { padding: 40px 20px; text-align: center; }
+.all-clear-icon { font-size: 28px; margin-bottom: 8px; }
+.all-clear-title { font-family: var(--mono); font-size: 14px; color: var(--green); margin-bottom: 4px; }
+.all-clear-sub { font-size: 12px; color: var(--muted2); }
+
+@media (max-width: 820px) {
+  .input-left { grid-template-columns: 1fr; }
+  .input-row { grid-template-columns: 1fr; }
+  .stats-row { grid-template-columns: 1fr 1fr; }
+  .two-col { grid-template-columns: 1fr; }
+  .fix-buttons { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="logo">
+    <div class="logo-box">SA</div>
+    <div>
+      <div class="logo-title">Stack Depth Analyzer</div>
+      <div class="logo-sub">LLVM call-chain stack usage analysis &mdash; embedded &amp; RTOS systems</div>
+    </div>
+  </div>
+</header>
+
+<div class="input-row">
+  <div class="input-left">
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".bc,.ll">
+      <div class="upload-icon">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+      </div>
+      <div class="drop-txt">
+        <strong>Drop .bc file or click to browse</strong>
+        <small>LLVM bitcode &mdash; <code>clang -emit-llvm -c file.c -o file.bc</code></small>
+      </div>
+      <div class="file-chosen" id="fileChosen">&#10003; <span id="fileName"></span></div>
+    </div>
+    <div class="thresh-block">
+      <div class="thresh-label">Stack threshold (bytes)</div>
+      <div class="thresh-row">
+        <input type="number" id="threshold" value="4096" min="1">
+        <div class="presets">
+          <button class="preset" onclick="setT(512)">512B</button>
+          <button class="preset" onclick="setT(1024)">1KB</button>
+          <button class="preset" onclick="setT(2048)">2KB</button>
+          <button class="preset" onclick="setT(4096)">4KB</button>
+          <button class="preset" onclick="setT(8192)">8KB</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <button class="run-btn" id="runBtn" onclick="runAnalysis()">
+    <div class="spin" id="spinner"></div>
+    <span id="btnLbl">&#9654;&nbsp; ANALYZE</span>
+  </button>
+</div>
+
+<div class="error-box" id="errBox"></div>
+<div id="results"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+let selFile = null, chartInst = null, origData = null, activeStrategy = null;
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+fileInput.addEventListener('change', e => { if (e.target.files[0]) pick(e.target.files[0]); });
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag'); if (e.dataTransfer.files[0]) pick(e.dataTransfer.files[0]); });
+
+function pick(f) {
+  selFile = f;
+  document.getElementById('fileName').textContent = f.name;
+  document.getElementById('fileChosen').style.display = 'inline-flex';
+}
+function setT(v) { document.getElementById('threshold').value = v; }
+function fmt(b) {
+  if (b >= 1048576) return (b/1048576).toFixed(1)+' MB';
+  if (b >= 1024) return (b/1024).toFixed(1)+' KB';
+  return b+' B';
+}
+function cls(d, t) { return d > t ? 'danger' : d > t*0.7 ? 'warn' : 'safe'; }
+
+async function runAnalysis() {
+  if (!selFile) { alert('Select a .bc file first'); return; }
+  const btn = document.getElementById('runBtn');
+  const lbl = document.getElementById('btnLbl');
+  const sp = document.getElementById('spinner');
+  const eb = document.getElementById('errBox');
+  btn.disabled = true; lbl.style.display = 'none'; sp.style.display = 'block'; eb.style.display = 'none';
+  activeStrategy = null;
+
+  const fd = new FormData();
+  fd.append('bcfile', selFile);
+  fd.append('threshold', document.getElementById('threshold').value);
+
+  try {
+    const r = await fetch('http://localhost:8765/analyze', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    origData = JSON.parse(JSON.stringify(d));
+    render(d, null);
+  } catch(e) {
+    eb.style.display = 'block';
+    eb.textContent = 'Error: ' + e.message + ' — Make sure server.py is running in WSL terminal.';
+  } finally {
+    btn.disabled = false; lbl.style.display = 'inline'; sp.style.display = 'none';
+  }
+}
+
+// ── STRATEGY SIMULATIONS ──────────────────────────────────────────
+
+function applyStrategy(strategyId) {
+  if (!origData) return;
+  activeStrategy = strategyId;
+  const data = JSON.parse(JSON.stringify(origData));
+  const T = data.threshold;
+  let changes = [];
+
+  if (strategyId === 'heap') {
+    // Move large allocas (>64B) to heap — frame becomes ~8B (just a pointer)
+    const THRESHOLD_SIZE = 64;
+    const POINTER_SIZE = 8;
+    data.functions.forEach(f => {
+      if (f.size > THRESHOLD_SIZE) {
+        changes.push({ fn: f.name, before: f.size, after: POINTER_SIZE, reason: 'heap-allocated' });
+        f.size = POINTER_SIZE;
+      }
+    });
+    recomputeChains(data);
+
+  } else if (strategyId === 'break') {
+    // Remove the deepest (leaf) function from every overflowing chain
+    const overChains = data.chains.filter(c => c.depth > T);
+    const leafNames = new Set();
+    overChains.forEach(c => {
+      if (c.steps && c.steps.length > 0) {
+        leafNames.add(c.steps[c.steps.length - 1].name);
+      }
+    });
+    leafNames.forEach(name => {
+      const f = data.functions.find(f => f.name === name);
+      if (f) {
+        changes.push({ fn: f.name, before: f.size, after: 0, reason: 'call removed (made async)' });
+        f.size = 0;
+        // Remove from chains
+        data.chains.forEach(c => {
+          c.steps = c.steps.filter(s => s.name !== name);
+        });
+      }
+    });
+    recomputeChains(data);
+
+  } else if (strategyId === 'threshold') {
+    // Find minimum safe threshold = deepest chain + 10% margin
+    const maxDepth = Math.max(...data.chains.map(c => c.depth));
+    const newT = Math.ceil(maxDepth * 1.1);
+    changes.push({ fn: 'threshold', before: T, after: newT, reason: 'minimum safe + 10% margin' });
+    data.threshold = newT;
+  }
+
+  // Recompute overflow risks
+  data.overflow_risks = [];
+  data.chains.forEach(c => {
+    if (c.depth > data.threshold) {
+      data.overflow_risks.push({ function: c.steps[0]?.name || '?', depth: c.depth, threshold: data.threshold });
+    }
+  });
+
+  render(data, { strategy: strategyId, changes });
+}
+
+function recomputeChains(data) {
+  // Rebuild frame size map from updated functions
+  const fsMap = {};
+  data.functions.forEach(f => { fsMap[f.name] = f.size; });
+
+  // Recompute depth for each chain
+  data.chains.forEach(c => {
+    let total = 0;
+    c.steps.forEach(s => {
+      s.size = fsMap[s.name] !== undefined ? fsMap[s.name] : s.size;
+      total += s.size;
+    });
+    c.depth = total;
+  });
+
+  // Re-sort
+  data.chains.sort((a, b) => b.depth - a.depth);
+  data.chains.forEach((c, i) => { c.rank = i + 1; });
+}
+
+function strategyInfo(id, data) {
+  const T = data.threshold;
+  if (id === 'heap') {
+    const big = data.functions.filter(f => f.size > 64);
+    const saving = big.reduce((s, f) => s + f.size - 8, 0);
+    return {
+      icon: '🗑️',
+      title: 'Heap-allocate large buffers',
+      desc: 'Move stack buffers >64B to heap using malloc(). Reduces frame sizes to pointer size (8B).',
+      saving: `~${fmt(saving)} saved across ${big.length} function${big.length!==1?'s':''}`
+    };
+  }
+  if (id === 'break') {
+    const overChains = data.chains.filter(c => c.depth > T);
+    const leafNames = new Set(overChains.map(c => c.steps.length ? c.steps[c.steps.length-1].name : ''));
+    return {
+      icon: '✂️',
+      title: 'Break deepest call level',
+      desc: 'Remove the deepest function from overflowing chains by making those calls async or inlining.',
+      saving: `Removes ${leafNames.size} deep call${leafNames.size!==1?'s':''} from chain`
+    };
+  }
+  if (id === 'threshold') {
+    const maxDepth = Math.max(...data.chains.map(c => c.depth));
+    const newT = Math.ceil(maxDepth * 1.1);
+    return {
+      icon: '📏',
+      title: 'Increase threshold to safe minimum',
+      desc: 'No code changes needed. Increase your stack allocation to fit the deepest chain + 10% margin.',
+      saving: `Set threshold to ${fmt(newT)} (was ${fmt(T)})`
+    };
+  }
+}
+
+// ── RENDER ────────────────────────────────────────────────────────
+
+function render(data, fix) {
+  const el = document.getElementById('results');
+  el.style.display = 'block';
+  const T = data.threshold;
+  const best = data.chains[0];
+  const risks = data.overflow_risks.length;
+  const maxFn = data.functions.length ? Math.max(...data.functions.map(f=>f.size)) : 1;
+  const isFixed = fix !== null;
+
+  // Build fix button savings using ORIGINAL data
+  const s1 = strategyInfo('heap', origData);
+  const s2 = strategyInfo('break', origData);
+  const s3 = strategyInfo('threshold', origData);
+
+  function hlChain(c) {
+    if (!c || !c.steps || !c.steps.length) return '';
+    const parts = c.steps.map((s,i) =>
+      `<span class="hl-fn">${s.name}</span><span class="hl-sz">(${s.size}B)</span>` +
+      (i < c.steps.length-1 ? '<span class="hl-arr"> &rarr; </span>' : '')
+    ).join('');
+    const names = c.steps.map(s=>s.name).join(' &rarr; ');
+    const dc = cls(c.depth, T);
+    const headroom = c.depth > T
+      ? `<span class="hl-over">+${fmt(c.depth-T)} over limit</span>`
+      : `<span class="hl-room">${fmt(T-c.depth)} headroom remaining</span>`;
+    return `<div class="headline">
+      <div class="hl-label">Worst-case stack usage &mdash; deepest call chain</div>
+      <div class="hl-chain">${parts}</div>
+      <div class="hl-total ${dc}">${names} &nbsp;uses ${fmt(c.depth)} of stack</div>
+      <div class="hl-meta">
+        <div>${c.steps.length} calls deep</div>
+        <div>threshold &nbsp;<b>${fmt(T)}</b></div>
+        <div>${headroom}</div>
+      </div>
+    </div>`;
+  }
+
+  function rawLines(chains) {
+    return chains.map(c => {
+      const path = c.steps.map(s =>
+        `<span class="raw-fn">${s.name}</span><span class="raw-sz">(${s.size}B)</span>`
+      ).join('<span class="raw-arr"> -&gt; </span>');
+      return `<span class="raw-line"><span class="raw-rank">#${c.rank}</span><span class="raw-depth">${c.depth} bytes:</span> ${path}</span>`;
+    }).join('');
+  }
+
+  function chainNodes(c, fix) {
+    const changedFns = fix ? new Set(fix.changes.map(ch=>ch.fn)) : new Set();
+    const changeMap = {};
+    if (fix) fix.changes.forEach(ch => { changeMap[ch.fn] = ch; });
+
+    return c.steps.map((s,i) => {
+      const changed = changedFns.has(s.name);
+      const ch = changeMap[s.name];
+      const sizeHtml = changed
+        ? `<span class="node-sz was">${ch.before}B</span><span class="node-sz-new">${s.size}B</span>`
+        : `<span class="node-sz">${s.size}B</span>`;
+      return `<div class="node ${changed?'fixed':''}"><span class="node-fn">${s.name}</span>${sizeHtml}</div>` +
+        (i < c.steps.length-1 ? '<span class="node-arr">&rarr;</span>' : '');
+    }).join('');
+  }
+
+  function overflowAlert() {
+    if (origData.overflow_risks.length === 0) return '';
+    if (risks === 0) {
+      return `<div class="alert success">
+        <div class="alert-top"><div>✓</div><div><strong>All overflows resolved</strong><p>No call chains exceed the ${fmt(T)} threshold after applying the fix.</p></div></div>
+      </div>`;
+    }
+    const fixBtns = ['heap','break','threshold'].map(id => {
+      const s = id === 'heap' ? s1 : id === 'break' ? s2 : s3;
+      const isActive = activeStrategy === id;
+      return `<button class="fix-btn ${isActive?'active':''}" onclick="applyStrategy('${id}')">
+        <div class="fix-btn-icon">${s.icon}</div>
+        <div class="fix-btn-title">${s.title}</div>
+        <div class="fix-btn-desc">${s.desc}</div>
+        <div class="fix-btn-saving">${s.saving}</div>
+      </button>`;
+    }).join('');
+    return `<div class="alert danger">
+      <div class="alert-top">
+        <div>⚠</div>
+        <div><strong>${risks} overflow risk${risks>1?'s':''} detected</strong>
+        <p>${origData.overflow_risks.map(r=>`${r.function} (${r.depth}B)`).join(', ')} exceed the ${fmt(origData.threshold)}B threshold.</p>
+        <p style="margin-top:8px;color:var(--muted2);">Choose a fix strategy:</p></div>
+      </div>
+      <div class="fix-buttons">${fixBtns}</div>
+    </div>`;
+  }
+
+  function changesPanel(fix) {
+    if (!fix || !fix.changes || fix.changes.length === 0) return '';
+    const rows = fix.changes.map(ch => {
+      if (ch.fn === 'threshold') {
+        return `<div class="change-row">
+          <span class="change-fn">threshold</span>
+          <span class="change-before">${fmt(ch.before)}</span>
+          <span class="change-arrow">&rarr;</span>
+          <span class="change-after">${fmt(ch.after)}</span>
+          <span class="change-reason">${ch.reason}</span>
+        </div>`;
+      }
+      return `<div class="change-row">
+        <span class="change-fn">${ch.fn}</span>
+        <span class="change-before">${ch.before}B</span>
+        <span class="change-arrow">&rarr;</span>
+        <span class="change-after">${ch.after === 0 ? 'removed' : ch.after+'B'}</span>
+        <span class="change-reason">${ch.reason}</span>
+      </div>`;
+    }).join('');
+    return `<div class="changes-panel show">
+      <div class="changes-hdr">✓ &nbsp;Changes applied — ${fix.changes.length} modification${fix.changes.length!==1?'s':''}</div>
+      ${rows}
+    </div>`;
+  }
+
+  el.innerHTML = `
+    ${fix ? `<div class="applied-banner show">
+      <span class="applied-tag">APPLIED</span>
+      <span class="applied-text">Strategy: <strong>${fix.strategy === 'heap' ? 'Heap-allocate large buffers' : fix.strategy === 'break' ? 'Break deepest call level' : 'Increase threshold'}</strong> — overflow risks: ${risks}</span>
+      <button class="reset-btn" onclick="render(origData, null); activeStrategy=null;">↺ Reset</button>
+    </div>` : ''}
+
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-lbl">Functions analyzed</div><div class="stat-num c-purple">${data.functions.length}</div></div>
+      <div class="stat-card"><div class="stat-lbl">Deepest chain</div><div class="stat-num ${cls(best?best.depth:0,T)==='danger'?'c-red':cls(best?best.depth:0,T)==='warn'?'c-amber':'c-green'}">${best?fmt(best.depth):'—'}</div></div>
+      <div class="stat-card"><div class="stat-lbl">Threshold</div><div class="stat-num">${fmt(T)}</div></div>
+      <div class="stat-card"><div class="stat-lbl">Overflow risks</div><div class="stat-num ${risks>0?'c-red':'c-green'}">${risks}</div></div>
+    </div>
+
+    ${hlChain(best)}
+    ${overflowAlert()}
+    ${changesPanel(fix)}
+
+    ${risks === 0 && origData.overflow_risks.length > 0 ? '' : ''}
+
+    <div class="chart-panel">
+      <div class="panel-hdr">
+        <span class="panel-title">Top call chains by stack depth</span>
+        <div class="legend">
+          <div class="leg-item"><div class="leg-dot" style="background:#00cba9"></div>Safe</div>
+          <div class="leg-item"><div class="leg-dot" style="background:#ffa502"></div>Warning</div>
+          <div class="leg-item"><div class="leg-dot" style="background:#ff4757"></div>Overflow</div>
+        </div>
+      </div>
+      <div style="position:relative;width:100%;height:${Math.max(200,data.chains.length*52+60)}px;">
+        <canvas id="cChart"></canvas>
+      </div>
+    </div>
+
+    <div class="raw-panel">
+      <div class="panel-hdr" style="padding:14px 22px;border-bottom:1px solid var(--border);">
+        <span class="panel-title">=== Top Call Chains by Stack Depth ===</span>
+      </div>
+      <div class="raw-body">${rawLines(data.chains)}</div>
+    </div>
+
+    <div class="chains-panel">
+      <div class="panel-hdr" style="padding:14px 22px;border-bottom:1px solid var(--border);">
+        <span class="panel-title">Visual chain breakdown</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--muted);background:var(--surface3);padding:3px 10px;border-radius:20px;">${data.chains.length} chains</span>
+      </div>
+      ${data.chains.map(c => {
+        const over = c.depth > T;
+        const dc = cls(c.depth, T);
+        return `<div class="chain-item">
+          <div class="chain-top">
+            <span class="chain-rank">#${c.rank}</span>
+            <span class="chain-depth ${dc}">${c.depth} B</span>
+            <span class="chain-badge ${over?'danger':'safe'}">${over?'OVERFLOW':'SAFE'}</span>
+          </div>
+          <div class="chain-nodes">${chainNodes(c, fix)}</div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div class="two-col">
+      <div class="mini-panel">
+        <div class="mini-hdr">Frame sizes (top ${Math.min(data.functions.length,20)})</div>
+        ${data.functions.slice(0,20).map(f=>`
+          <div class="fn-row">
+            <span class="fn-nm">${f.name}</span>
+            <div class="fn-bar-track"><div class="fn-bar-fill" style="width:${Math.max(3,(f.size/maxFn)*100)}%"></div></div>
+            <span class="fn-b">${f.size}B</span>
+          </div>`).join('')}
+      </div>
+
+      ${risks > 0 ? `
+      <div class="mini-panel">
+        <div class="mini-hdr">Overflow risks</div>
+        ${data.overflow_risks.map(r=>`
+          <div class="risk-row">
+            <div class="risk-dot"></div>
+            <span class="risk-fn">${r.function}</span>
+            <span class="risk-over">${r.depth}B / ${T}B (+${r.depth-T}B)</span>
+          </div>`).join('')}
+      </div>` : `
+      <div class="mini-panel">
+        <div class="all-clear">
+          <div class="all-clear-icon">✓</div>
+          <div class="all-clear-title">All clear</div>
+          <div class="all-clear-sub">No functions exceed the ${fmt(T)} threshold</div>
+        </div>
+      </div>`}
+    </div>
+  `;
+
+  if (chartInst) { chartInst.destroy(); chartInst = null; }
+  const colors = data.chains.map(c => c.depth > T ? '#ff4757' : c.depth > T*0.7 ? '#ffa502' : '#00cba9');
+  chartInst = new Chart(document.getElementById('cChart'), {
+    type: 'bar',
+    data: {
+      labels: data.chains.map(c => c.steps.length ? c.steps[0].name : '#'+c.rank),
+      datasets: [{ data: data.chains.map(c=>c.depth), backgroundColor: colors, borderWidth: 0, borderRadius: 5 }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: items => { const c = data.chains[items[0].dataIndex]; return c.steps.map(s=>s.name).join(' → '); },
+            label: ctx => ' Total: ' + ctx.raw + ' bytes',
+            afterLabel: ctx => { const c = data.chains[ctx.dataIndex]; return c.steps.map(s=>'  '+s.name+' ('+s.size+'B)'); }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#6b6b88', font: { size: 11, family: 'Space Mono' } }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'rgba(255,255,255,0.07)' } },
+        y: { ticks: { color: '#9898b0', font: { size: 11, family: 'Space Mono' } }, grid: { display: false }, border: { display: false } }
+      }
+    }
+  });
+}
+</script>
+</body>
+</html>
